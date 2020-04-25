@@ -20,6 +20,10 @@ extra-doc-files: doc/welcome.gif
                , doc/tasks.png
 tested-with: GHC ==8.6.5 || ==8.4.4
 
+package text-icu
+  extra-include-dirs: /Users/e/homebrew/Cellar/icu4c/54.1/include
+  extra-lib-dirs: /Users/e/homebrew/Cellar/icu4c/54.1/lib
+  
 library
   exposed-modules: Reflex.Vty
                  , Reflex.Vty.Host

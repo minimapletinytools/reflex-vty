@@ -2,11 +2,11 @@
 Module: Reflex.Vty.Host
 Description: Scaffolding for running a reflex-vty application
 -}
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ConstraintKinds  #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs            #-}
+{-# LANGUAGE LambdaCase       #-}
+{-# LANGUAGE RankNTypes       #-}
 
 module Reflex.Vty.Host
   ( VtyApp
@@ -18,25 +18,25 @@ module Reflex.Vty.Host
   , VtyEvent
   ) where
 
-import Control.Concurrent (forkIO, killThread)
-import Control.Concurrent.Chan (newChan, readChan, writeChan)
-import Control.Exception (onException)
-import Control.Monad (forM, forM_, forever)
-import Control.Monad.Fix (MonadFix, fix)
-import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.Identity (Identity(..))
-import Control.Monad.Primitive (PrimMonad)
-import Control.Monad.Ref (MonadRef, Ref, readRef)
-import Data.Dependent.Sum (DSum ((:=>)))
-import Data.IORef (IORef)
-import Data.IORef (readIORef)
-import Data.Maybe (catMaybes)
+import           Control.Concurrent      (forkIO, killThread)
+import           Control.Concurrent.Chan (newChan, readChan, writeChan)
+import           Control.Exception       (onException)
+import           Control.Monad           (forM, forM_, forever)
+import           Control.Monad.Fix       (MonadFix, fix)
+import           Control.Monad.Identity  (Identity (..))
+import           Control.Monad.IO.Class  (MonadIO, liftIO)
+import           Control.Monad.Primitive (PrimMonad)
+import           Control.Monad.Ref       (MonadRef, Ref, readRef)
+import           Data.Dependent.Sum      (DSum ((:=>)))
+import           Data.IORef              (IORef)
+import           Data.IORef              (readIORef)
+import           Data.Maybe              (catMaybes)
 
-import Reflex
-import Reflex.Host.Class
-import Reflex.Spider.Orphans ()
-import qualified Graphics.Vty as V
-import Graphics.Vty (DisplayRegion)
+import           Graphics.Vty            (DisplayRegion)
+import qualified Graphics.Vty            as V
+import           Reflex
+import           Reflex.Host.Class
+import           Reflex.Spider.Orphans   ()
 
 -- | A synonym for the underlying vty event type from 'Graphics.Vty'. This should
 -- probably ultimately be replaced by something defined in this library.
@@ -44,12 +44,11 @@ type VtyEvent = V.Event
 
 -- | The output of a 'VtyApp'.
 data VtyResult t = VtyResult
-  { _vtyResult_picture :: Behavior t V.Picture
-  -- ^ The current vty output. 'runVtyAppWithHandle' samples this value every time an
-  -- event fires and updates the display.
-  , _vtyResult_shutdown :: Event t ()
-  -- ^ An event that requests application termination.
-  }
+    { _vtyResult_picture  :: Behavior t V.Picture
+    -- ^ The current vty output. 'runVtyAppWithHandle' samples this value every time an
+    , _vtyResult_shutdown :: Event t ()
+    -- ^ An event that requests application termination.
+    }
 
 -- | The constraints necessary to run a 'VtyApp'. See 'runVtyAppWithHandle' for more
 -- on why each of these are necessary and how they can be fulfilled.
@@ -115,7 +114,7 @@ runVtyAppWithHandle vty vtyGuest = flip onException (V.shutdown vty) $
     -- processed.
     events <- liftIO newChan
 
-    displayRegion0 <- V.displayBounds $ V.outputIface vty
+    displayRegion0 <- liftIO $ V.displayBounds $ V.outputIface vty
 
     -- Run the vty "guest" application, providing the appropriate context. The
     -- result is a 'VtyResult', and a 'FireCommand' that will be used to
