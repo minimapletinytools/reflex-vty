@@ -74,6 +74,7 @@ newtype Layout t m a = Layout
     , MonadFix
     , TriggerEvent t
     , PerformEvent t
+    , PostBuild t
     , NotReady t
     , MonadReflexCreateTrigger t
     , HasDisplaySize t
@@ -280,5 +281,3 @@ computeSizes available constraints =
 computeEdges :: (Ord k) => Map k (a, Int) -> Map k (a, (Int, Int))
 computeEdges = fst . Map.foldlWithKey' (\(m, offset) k (a, sz) ->
   (Map.insert k (a, (offset, sz)) m, sz + offset)) (Map.empty, 0)
-
-
