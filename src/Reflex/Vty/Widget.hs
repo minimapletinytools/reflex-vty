@@ -45,6 +45,7 @@ module Reflex.Vty.Widget
   , splitV
   , splitH
   , splitVDrag
+  , splitHDrag
   , boxTitle
   , box
   , boxStatic
@@ -545,6 +546,53 @@ splitVDrag wS wA wB = do
       m <- mouseDown V.BLeft
       x' <- x
       return (m, x')
+
+
+
+
+integralFractionalDivide :: (Integral a, Fractional b) => a -> a -> b
+integralFractionalDivide n d = fromIntegral n / fromIntegral d
+
+-- | A split of the available space into two parts with a draggable separator.
+-- Starts with half the space allocated to each, and the first pane has focus.
+-- Clicking in a pane switches focus.
+splitHDrag :: (Reflex t, MonadFix m, MonadHold t m, MonadNodeId m)
+  => Int -- ^ initial width of left panel
+  -> VtyWidget t m ()
+  -> VtyWidget t m a
+  -> VtyWidget t m b
+  -> VtyWidget t m (a,b)
+splitHDrag splitter0 wS wA wB = mdo
+  dh <- displayHeight
+  dw <- displayWidth
+  w0 <- sample . current $ dw
+  dragE <- drag V.BLeft
+  splitterCheckpoint <- holdDyn splitter0 $ leftmost [fst <$> ffilter snd dragSplitter, resizeSplitter]
+  splitterPos <- holdDyn splitter0 $ leftmost [fst <$> dragSplitter, resizeSplitter]
+  splitterFrac <- holdDyn (integralFractionalDivide splitter0 w0) $ ffor (attach (current dw) (fst <$> dragSplitter)) $ \(w, x) ->
+    fromIntegral x / (max 1 (fromIntegral w))
+  let dragSplitter = fforMaybe (attach (current splitterCheckpoint) dragE) $
+        \(splitterX, Drag (fromX, _) (toX, _) _ _ end) ->
+          if splitterX == fromX then Just (toX, end) else Nothing
+      regA = DynRegion 0 0 splitterPos dh
+      regS = DynRegion splitterPos 0 1 dh
+      regB = DynRegion (splitterPos + 1) 0 (dw - splitterPos - 1) dh
+      resizeSplitter = ffor (attach (current splitterFrac) (updated dw)) $
+        \(frac, w) -> round (frac * fromIntegral w)
+  focA <- holdDyn True $ leftmost
+    [ True <$ mA
+    , False <$ mB
+    ]
+  (mA, rA) <- pane2 regA focA $ withMouseDown wA
+  pane regS (pure False) wS
+  (mB, rB) <- pane2 regB (not <$> focA) $ withMouseDown wB
+  return (rA, rB)
+  where
+    withMouseDown x = do
+      m <- mouseDown V.BLeft
+      x' <- x
+      return (m, x')
+
 
 -- | Fill the background with a particular character.
 fill :: (Reflex t, Monad m) => Char -> VtyWidget t m ()
