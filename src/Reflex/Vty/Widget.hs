@@ -68,6 +68,10 @@ module Reflex.Vty.Widget
   , keyCombo
   , keyCombos
   , blank
+
+  , DragState(..)
+  , Drag2(..)
+  , drag2
   , pane2
   ) where
 
@@ -787,6 +791,53 @@ display a = text $ T.pack . show <$> a
 -- | A widget that draws nothing
 blank :: Monad m => VtyWidget t m ()
 blank = return ()
+
+
+
+
+data DragState = DragStart | Dragging | DragEnd deriving (Eq, Ord, Show)
+
+-- | Same as 'Drag' but able to track drag start case
+data Drag2 = Drag2
+  { _drag2_from      :: (Int, Int) -- ^ Where the drag began
+  , _drag2_to        :: (Int, Int) -- ^ Where the mouse currently is
+  , _drag2_button    :: V.Button -- ^ Which mouse button is dragging
+  , _drag2_modifiers :: [V.Modifier] -- ^ What modifiers are held
+  , _drag2_state     :: DragState -- ^ Whether the drag ended (the mouse button was released)
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Same as 'drag' but returns 'Drag2' which tracks drag start events
+drag2
+  :: (Reflex t, MonadFix m, MonadHold t m)
+  => V.Button
+  -> VtyWidget t m (Event t Drag2)
+drag2 btn = mdo
+  inp <- input
+  let f :: Maybe Drag2 -> V.Event -> Maybe Drag2
+      f Nothing = \case
+        V.EvMouseDown x y btn' mods
+          | btn == btn' -> Just $ Drag2 (x,y) (x,y) btn' mods DragStart
+          | otherwise   -> Nothing
+        _ -> Nothing
+      f (Just (Drag2 from _ _ mods st)) = \case
+        V.EvMouseDown x y btn' mods'
+          | st == DragEnd && btn == btn'  -> Just $ Drag2 (x,y) (x,y) btn' mods' DragStart
+          | btn == btn'         -> Just $ Drag2 from (x,y) btn mods' Dragging
+          | otherwise           -> Nothing -- Ignore other buttons.
+        V.EvMouseUp x y (Just btn')
+          | st == DragEnd        -> Nothing
+          | btn == btn' -> Just $ Drag2 from (x,y) btn mods DragEnd
+          | otherwise   -> Nothing
+        V.EvMouseUp x y Nothing -- Terminal doesn't specify mouse up button,
+                                -- assume it's the right one.
+          | st == DragEnd      -> Nothing
+          | otherwise -> Just $ Drag2 from (x,y) btn mods DragEnd
+        _ -> Nothing
+  let
+    newDrag = attachWithMaybe f (current dragD) inp
+  dragD <- holdDyn Nothing $ Just <$> newDrag
+  return (fmapMaybe id $ updated dragD)
 
 -- |
 -- * 'Tracking' state means actively tracking the current stream of mouse events
