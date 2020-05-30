@@ -2,17 +2,17 @@
 Module: Reflex.Vty.Widget.Layout
 Description: Monad transformer and tools for arranging widgets and building screen layouts
 -}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RecursiveDo                #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Reflex.Vty.Widget.Layout
   (  Orientation(..)
   , Constraint(..)
-  , Layout
+  , Layout(..)
   , runLayout
   , TileConfig(..)
   , tile
@@ -22,40 +22,47 @@ module Reflex.Vty.Widget.Layout
   , row
   , tabNavigation
   , askOrientation
+
+  -- needed for runLayout_debug
+  , LayoutSegment(..)
+  , LayoutCtx(..)
+  , computeEdges
+  , computeSizes
+
   ) where
 
-import Control.Monad.NodeId (NodeId, MonadNodeId(..))
-import Control.Monad.Reader
-import Data.Bimap (Bimap)
-import qualified Data.Bimap as Bimap
-import Data.Default (Default(..))
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
-import Data.Monoid hiding (First(..))
-import Data.Ratio ((%))
-import Data.Semigroup (First(..))
-import qualified Graphics.Vty as V
+import           Control.Monad.NodeId (MonadNodeId (..), NodeId)
+import           Control.Monad.Reader
+import           Data.Bimap           (Bimap)
+import qualified Data.Bimap           as Bimap
+import           Data.Default         (Default (..))
+import           Data.Map             (Map)
+import qualified Data.Map             as Map
+import           Data.Maybe           (fromMaybe)
+import           Data.Monoid          hiding (First (..))
+import           Data.Ratio           ((%))
+import           Data.Semigroup       (First (..))
+import qualified Graphics.Vty         as V
 
-import Reflex
-import Reflex.Host.Class (MonadReflexCreateTrigger)
-import Reflex.Vty.Widget
+import           Reflex
+import           Reflex.Host.Class    (MonadReflexCreateTrigger)
+import           Reflex.Vty.Widget
 
 -- | The main-axis orientation of a 'Layout' widget
 data Orientation = Orientation_Column
-                 | Orientation_Row
-  deriving (Show, Read, Eq, Ord)
+    | Orientation_Row
+    deriving (Show, Read, Eq, Ord)
 
 data LayoutSegment = LayoutSegment
-  { _layoutSegment_offset :: Int
-  , _layoutSegment_size :: Int
-  }
+    { _layoutSegment_offset :: Int
+    , _layoutSegment_size   :: Int
+    }
 
 data LayoutCtx t = LayoutCtx
-  { _layoutCtx_regions :: Dynamic t (Map NodeId LayoutSegment)
-  , _layoutCtx_focusDemux :: Demux t (Maybe NodeId)
-  , _layoutCtx_orientation :: Dynamic t Orientation
-  }
+    { _layoutCtx_regions     :: Dynamic t (Map NodeId LayoutSegment)
+    , _layoutCtx_focusDemux  :: Demux t (Maybe NodeId)
+    , _layoutCtx_orientation :: Dynamic t Orientation
+    }
 
 -- | The Layout monad transformer keeps track of the configuration (e.g., 'Orientation') and
 -- 'Constraint's of its child widgets, apportions vty real estate to each, and acts as a
@@ -74,11 +81,11 @@ newtype Layout t m a = Layout
     , MonadFix
     , TriggerEvent t
     , PerformEvent t
+    , PostBuild t
     , NotReady t
     , MonadReflexCreateTrigger t
     , HasDisplaySize t
     , MonadNodeId
-    , PostBuild t
     )
 
 instance MonadTrans (Layout t) where
@@ -103,7 +110,7 @@ runLayout ddir focus0 focusShift (Layout child) = do
   dh <- displayHeight
   let main = ffor3 ddir dw dh $ \d w h -> case d of
         Orientation_Column -> h
-        Orientation_Row -> w
+        Orientation_Row    -> w
   pb <- getPostBuild
   rec ((a, focusReq), queriesEndo) <- runReaderT (runDynamicWriterT $ runEventWriterT child) $ LayoutCtx solutionMap focusDemux ddir
       let queries = flip appEndo [] <$> queriesEndo
@@ -184,11 +191,11 @@ tile (TileConfig con focusable) child = do
 
 -- | Configuration options for and constraints on 'tile'
 data TileConfig t = TileConfig
-  { _tileConfig_constraint :: Dynamic t Constraint
+    { _tileConfig_constraint :: Dynamic t Constraint
     -- ^ 'Constraint' on the tile's size
-  , _tileConfig_focusable :: Dynamic t Bool
+    , _tileConfig_focusable  :: Dynamic t Bool
     -- ^ Whether the tile is focusable
-  }
+    }
 
 instance Reflex t => Default (TileConfig t) where
   def = TileConfig (pure $ Constraint_Min 0) (pure True)
@@ -254,8 +261,8 @@ askOrientation = Layout $ asks _layoutCtx_orientation
 
 -- | Datatype representing constraints on a widget's size along the main axis (see 'Orientation')
 data Constraint = Constraint_Fixed Int
-                | Constraint_Min Int
-  deriving (Show, Read, Eq, Ord)
+    | Constraint_Min Int
+    deriving (Show, Read, Eq, Ord)
 
 -- | Compute the size of each widget "@k@" based on the total set of 'Constraint's
 computeSizes
@@ -273,13 +280,11 @@ computeSizes available constraints =
       adjustment = max 0 $ available - minTotal - szStretch * numStretch
   in snd $ Map.mapAccum (\adj (a, c) -> case c of
       Constraint_Fixed n -> (adj, (a, n))
-      Constraint_Min n -> (0, (a, n + szStretch + adj))) adjustment constraints
+      Constraint_Min n   -> (0, (a, n + szStretch + adj))) adjustment constraints
   where
     isMin (Constraint_Min _) = True
-    isMin _ = False
+    isMin _                  = False
 
 computeEdges :: (Ord k) => Map k (a, Int) -> Map k (a, (Int, Int))
 computeEdges = fst . Map.foldlWithKey' (\(m, offset) k (a, sz) ->
   (Map.insert k (a, (offset, sz)) m, sz + offset)) (Map.empty, 0)
-
-
